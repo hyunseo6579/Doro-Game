@@ -189,7 +189,10 @@
       return (
         <div className="flex flex-col h-full w-full bg-slate-900 text-white">
           <div className="p-4 bg-slate-800 border-b-2 border-pink-500 flex justify-between items-center gap-4">
-            <h1 className="text-xl font-bold text-pink-500">DORO GAME</h1>
+            <div className="flex items-center gap-2">
+              <img src={DORO_IMG_URL} alt="Doro" className="w-8 h-8 rounded object-cover" onError={(e)=>{e.currentTarget.style.display='none';}} />
+              <h1 className="text-xl font-bold text-pink-500">DORO GAME</h1>
+            </div>
             <div className="text-sm text-slate-300">{statusLabel}</div>
             <div className="text-xl font-mono">Score: {score}</div>
           </div>
