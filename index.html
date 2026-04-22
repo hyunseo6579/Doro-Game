@@ -8,11 +8,11 @@
   />
   <title>Doro Game - Fixed</title>
 
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@discord/embedded-app-sdk"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/unpkg/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="/unpkg/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="/unpkg/@discord/embedded-app-sdk"></script>
+  <script src="/unpkg/@babel/standalone/babel.min.js"></script>
+  <script src="/tailwind"></script>
 
   <style>
     html, body, #root {
@@ -33,6 +33,15 @@
     const { useState, useEffect, useRef } = React;
 
     const CLIENT_ID = "1496343319687729292";
+
+    // Discord Activity URL mappings
+    if (window.DiscordSDK?.patchUrlMappings) {
+      window.DiscordSDK.patchUrlMappings([
+        { prefix: "/", target: "doro-game.vercel.app" },
+        { prefix: "/unpkg", target: "unpkg.com" },
+        { prefix: "/tailwind", target: "cdn.tailwindcss.com" }
+      ]);
+    }
 
     // Safely detect the SDK regardless of how the UMD bundle exposes it.
     const DiscordSDKCtor =
