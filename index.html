@@ -100,16 +100,27 @@
       useEffect(() => {
         const setupDiscord = async () => {
           try {
+            // Attempt to connect to Discord
             await discordSdk.ready();
-            setGameState('playing'); // Move to playing once Discord is ready
+            console.log("Discord SDK is ready");
+            setGameState('playing');
           } catch (error) {
             console.error("Discord SDK failed to initialize:", error);
-            // Fallback for browser testing if not in Discord
+            // Fallback: Start the game even if not in Discord
             setGameState('playing'); 
           }
         };
 
+        // Emergency fallback: If nothing happens in 3 seconds, force the game to start
+        const timeout = setTimeout(() => {
+          if (gameState === 'loading') {
+            console.warn("Discord SDK handshake timed out. Falling back to manual start.");
+            setGameState('playing');
+          }
+        }, 3000);
+
         setupDiscord();
+        return () => clearTimeout(timeout);
       }, []);
 
       // Handle Background Music
