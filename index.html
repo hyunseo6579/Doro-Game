@@ -1,20 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Doro Game</title>
-  
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+  <title>Doro Game - Fixed</title>
+
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  
   <script src="https://unpkg.com/@discord/embedded-app-sdk"></script>
-  
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  
+
   <style>
-    /* Force height for Discord containers */
     html, body, #root {
       height: 100% !important;
       width: 100% !important;
@@ -32,14 +32,21 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    const CLIENT_ID = "1496343319687729292"; //
-    const discordSdk = new window.discordSdk.DiscordSDK(CLIENT_ID);
+    const CLIENT_ID = "1496343319687729292";
 
-    // Grid constants
+    // Safely detect the SDK regardless of how the UMD bundle exposes it.
+    const DiscordSDKCtor =
+      window.DiscordSDK?.DiscordSDK ||
+      window.DiscordSDK ||
+      window.discordSdk?.DiscordSDK ||
+      null;
+
+    const discordSdk = DiscordSDKCtor ? new DiscordSDKCtor(CLIENT_ID) : null;
+
     const COLS = 20;
     const ROWS = 10;
     const TIME_LIMIT = 60000;
-    const DORO_IMG_URL = "doro.png"; 
+    const DORO_IMG_URL = "doro.png";
 
     const generateGrid = () => {
       const newGrid = [];
@@ -47,9 +54,10 @@
         for (let c = 0; c < COLS; c++) {
           newGrid.push({
             id: `${r}-${c}`,
-            row: r, col: c,
+            row: r,
+            col: c,
             value: Math.floor(Math.random() * 9) + 1,
-            isCleared: false
+            isCleared: false,
           });
         }
       }
@@ -57,61 +65,78 @@
     };
 
     function App() {
-      // START IN PLAYING STATE to prevent white screens
-      const [gameState, setGameState] = useState('playing'); 
+      const [gameState, setGameState] = useState("playing");
       const [grid, setGrid] = useState(() => generateGrid());
       const [score, setScore] = useState(0);
       const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
       const [selection, setSelection] = useState(null);
+      const [sdkStatus, setSdkStatus] = useState("initializing");
       const boardRef = useRef(null);
 
       useEffect(() => {
         const setupDiscord = async () => {
+          if (!discordSdk) {
+            console.warn("Discord SDK not found. Running as normal web page.");
+            setSdkStatus("browser");
+            return;
+          }
+
           try {
             await discordSdk.ready();
-            console.log("Discord Ready");
+            console.log("Discord SDK ready");
+            setSdkStatus("discord");
           } catch (e) {
-            console.warn("Discord SDK failed or running in browser. Game will continue.");
+            console.warn("Discord SDK failed or running outside Discord.", e);
+            setSdkStatus("browser");
           }
         };
+
         setupDiscord();
       }, []);
 
-      // Timer Logic
       useEffect(() => {
-        if (gameState !== 'playing') return;
+        if (gameState !== "playing") return;
+
         const interval = setInterval(() => {
           setTimeLeft((prev) => {
-            if (prev <= 100) { setGameState('gameover'); return 0; }
+            if (prev <= 100) {
+              setGameState("gameover");
+              return 0;
+            }
             return prev - 100;
           });
         }, 100);
+
         return () => clearInterval(interval);
       }, [gameState]);
 
-      // Handle pointer events (logic from original file)
       const handlePointerDown = (e) => {
         const el = document.elementFromPoint(e.clientX, e.clientY);
-        const cell = el?.closest('.game-cell');
-        if (!cell) return;
-        
-        boardRef.current.setPointerCapture(e.pointerId);
-        const r = parseInt(cell.dataset.row);
-        const c = parseInt(cell.dataset.col);
+        const cell = el?.closest(".game-cell");
+        if (!cell || !boardRef.current) return;
+
+        try {
+          boardRef.current.setPointerCapture(e.pointerId);
+        } catch (err) {
+          console.warn("Could not capture pointer", err);
+        }
+
+        const r = parseInt(cell.dataset.row, 10);
+        const c = parseInt(cell.dataset.col, 10);
         setSelection({ startRow: r, startCol: c, endRow: r, endCol: c });
       };
 
       const handlePointerMove = (e) => {
         if (!selection) return;
         const el = document.elementFromPoint(e.clientX, e.clientY);
-        const cell = el?.closest('.game-cell');
-        if (cell) {
-          setSelection(prev => ({
-            ...prev,
-            endRow: parseInt(cell.dataset.row),
-            endCol: parseInt(cell.dataset.col)
-          }));
-        }
+        const cell = el?.closest(".game-cell");
+        if (!cell) return;
+
+        setSelection((prev) => ({
+          ...prev,
+          endRow: parseInt(cell.dataset.row, 10),
+          endCol: parseInt(cell.dataset.col, 10),
+        }));
       };
 
       const handlePointerUp = () => {
@@ -128,64 +153,94 @@
 
         let sum = 0;
         let indices = [];
+
         grid.forEach((cell, i) => {
-          if (cell.row >= minR && cell.row <= maxR && cell.col >= minC && cell.col <= maxC) {
-            if (!cell.isCleared) { sum += cell.value; indices.push(i); }
+          if (
+            cell.row >= minR &&
+            cell.row <= maxR &&
+            cell.col >= minC &&
+            cell.col <= maxC &&
+            !cell.isCleared
+          ) {
+            sum += cell.value;
+            indices.push(i);
           }
         });
 
         if (sum === 10) {
-          setGrid(prev => {
+          setGrid((prev) => {
             const next = [...prev];
-            indices.forEach(idx => next[idx].isCleared = true);
+            indices.forEach((idx) => {
+              next[idx] = { ...next[idx], isCleared: true };
+            });
             return next;
           });
-          setScore(s => s + 1000);
+          setScore((s) => s + 1000);
         }
       };
 
+      const statusLabel =
+        sdkStatus === "discord"
+          ? "Running in Discord"
+          : sdkStatus === "browser"
+          ? "Running in Browser"
+          : "Initializing";
+
       return (
         <div className="flex flex-col h-full w-full bg-slate-900 text-white">
-          <div className="p-4 bg-slate-800 border-b-2 border-pink-500 flex justify-between items-center">
+          <div className="p-4 bg-slate-800 border-b-2 border-pink-500 flex justify-between items-center gap-4">
             <h1 className="text-xl font-bold text-pink-500">DORO GAME</h1>
+            <div className="text-sm text-slate-300">{statusLabel}</div>
             <div className="text-xl font-mono">Score: {score}</div>
           </div>
+
           <div className="w-full h-2 bg-slate-700">
-             <div className="h-full bg-pink-500 transition-all" style={{width: `${(timeLeft/TIME_LIMIT)*100}%`}}></div>
+            <div
+              className="h-full bg-pink-500 transition-all"
+              style={{ width: `${(timeLeft / TIME_LIMIT) * 100}%` }}
+            />
           </div>
+
           <div className="flex-1 p-2 flex items-center justify-center overflow-hidden">
-            <div 
+            <div
               ref={boardRef}
-              className="grid gap-1 w-full max-w-4xl"
+              className="grid gap-1 w-full max-w-4xl touch-none select-none"
               style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)` }}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
             >
               {grid.map((cell) => (
-                <div 
+                <div
                   key={cell.id}
                   data-row={cell.row}
                   data-col={cell.col}
-                  className={`game-cell flex items-center justify-center text-xs font-bold rounded-sm border-b-2 border-black/20 
-                    ${cell.isCleared ? 'opacity-0' : 'bg-[#C7A8E6] text-black'}`}
+                  className={`game-cell flex items-center justify-center text-xs font-bold rounded-sm border-b-2 border-black/20 ${
+                    cell.isCleared ? "opacity-0" : "bg-[#C7A8E6] text-black"
+                  }`}
                 >
                   {!cell.isCleared && cell.value}
                 </div>
               ))}
             </div>
           </div>
-          {gameState === 'gameover' && (
+
+          {gameState === "gameover" && (
             <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50">
               <h2 className="text-4xl font-bold text-pink-500 mb-4">GAME OVER</h2>
-              <button onClick={() => window.location.reload()} className="px-8 py-3 bg-pink-600 rounded-full font-bold">RETRY</button>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-8 py-3 bg-pink-600 rounded-full font-bold"
+              >
+                RETRY
+              </button>
             </div>
           )}
         </div>
       );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
+    const root = ReactDOM.createRoot(document.getElementById("root"));
     root.render(<App />);
   </script>
 </body>
