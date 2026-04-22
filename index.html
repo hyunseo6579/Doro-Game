@@ -5,67 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Doro Game</title>
   
-  <script src="https://unpkg.com/@discord/embedded-app-sdk"></script>
-  
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@discord/embedded-app-sdk"></script>
   
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   
   <style>
-    body {
-      touch-action: none;
-      overscroll-behavior: none;
+    /* Force height for Discord containers */
+    html, body, #root {
+      height: 100% !important;
+      width: 100% !important;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
       background-color: #0f172a;
-      /* Ensures the game fills the Discord activity window exactly */
-      height: 100vh;
-      width: 100vw;
     }
-    
-    .game-cell {
-      aspect-ratio: 1 / 1;
-    }
-
-    @keyframes score-pop {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.15); }
-      100% { transform: scale(1); }
-    }
-    .animate-score {
-      animation: score-pop 0.3s ease-out;
-    }
-
-    @keyframes float {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-10px); }
-    }
-    .floating-icon {
-      animation: float 3s ease-in-out infinite;
-    }
+    .game-cell { aspect-ratio: 1 / 1; }
   </style>
 </head>
-<body class="bg-slate-900 text-white select-none overflow-hidden h-screen w-screen">
-  <div id="root" class="h-full w-full"></div>
+<body>
+  <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // Replace this with your actual Client ID from the Discord Developer Portal
-    const CLIENT_ID = "1496343319687729292"; 
-    
-    // Initialize the Discord SDK
+    const CLIENT_ID = "1496343319687729292"; //
     const discordSdk = new window.discordSdk.DiscordSDK(CLIENT_ID);
 
+    // Grid constants
     const COLS = 20;
     const ROWS = 10;
     const TIME_LIMIT = 60000;
-    const DORO_IMG_URL = "doro.png"
-
-    // --- SOUND EFFECT CONFIGURATION ---
-    const BGM_URL = ""; 
-    const MATCH_SOUND_URL = ""; 
+    const DORO_IMG_URL = "doro.png"; 
 
     const generateGrid = () => {
       const newGrid = [];
@@ -73,8 +47,7 @@
         for (let c = 0; c < COLS; c++) {
           newGrid.push({
             id: `${r}-${c}`,
-            row: r,
-            col: c,
+            row: r, col: c,
             value: Math.floor(Math.random() * 9) + 1,
             isCleared: false
           });
@@ -84,309 +57,128 @@
     };
 
     function App() {
-      const [gameState, setGameState] = useState('loading'); // Start in loading state
+      // START IN PLAYING STATE to prevent white screens
+      const [gameState, setGameState] = useState('playing'); 
       const [grid, setGrid] = useState(() => generateGrid());
       const [score, setScore] = useState(0);
-      const [highScore, setHighScore] = useState(0);
       const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
       const [selection, setSelection] = useState(null);
-      const [isScoreAnimating, setIsScoreAnimating] = useState(false);
-      const [isMuted, setIsMuted] = useState(false);
-
       const boardRef = useRef(null);
-      const bgmRef = useRef(null);
 
-      // --- DISCORD INITIALIZATION ---
       useEffect(() => {
         const setupDiscord = async () => {
           try {
-            // Attempt to connect to Discord
             await discordSdk.ready();
-            console.log("Discord SDK is ready");
-            setGameState('playing');
-          } catch (error) {
-            console.error("Discord SDK failed to initialize:", error);
-            // Fallback: Start the game even if not in Discord
-            setGameState('playing'); 
+            console.log("Discord Ready");
+          } catch (e) {
+            console.warn("Discord SDK failed or running in browser. Game will continue.");
           }
         };
-
-        // Emergency fallback: If nothing happens in 3 seconds, force the game to start
-        const timeout = setTimeout(() => {
-          if (gameState === 'loading') {
-            console.warn("Discord SDK handshake timed out. Falling back to manual start.");
-            setGameState('playing');
-          }
-        }, 3000);
-
         setupDiscord();
-        return () => clearTimeout(timeout);
       }, []);
-
-      // Handle Background Music
-      useEffect(() => {
-        if (BGM_URL) {
-          bgmRef.current = new Audio(BGM_URL);
-          bgmRef.current.loop = true;
-          bgmRef.current.volume = 0.4;
-        }
-        
-        return () => {
-          if (bgmRef.current) {
-            bgmRef.current.pause();
-            bgmRef.current = null;
-          }
-        };
-      }, []);
-
-      useEffect(() => {
-        if (!bgmRef.current) return;
-        if (gameState === 'playing' && !isMuted) {
-          bgmRef.current.play().catch(() => {});
-        } else {
-          bgmRef.current.pause();
-        }
-      }, [gameState, isMuted]);
 
       // Timer Logic
       useEffect(() => {
-        let interval;
-        if (gameState === 'playing') {
-          interval = setInterval(() => {
-            setTimeLeft((prev) => {
-              if (prev <= 100) {
-                setGameState('gameover');
-                return 0;
-              }
-              return prev - 100;
-            });
-          }, 100);
-        }
+        if (gameState !== 'playing') return;
+        const interval = setInterval(() => {
+          setTimeLeft((prev) => {
+            if (prev <= 100) { setGameState('gameover'); return 0; }
+            return prev - 100;
+          });
+        }, 100);
         return () => clearInterval(interval);
       }, [gameState]);
 
-      useEffect(() => {
-        if (gameState === 'gameover' && score > highScore) {
-          setHighScore(score);
-        }
-      }, [gameState, score, highScore]);
-
-      const playPopSound = () => {
-        if (!isMuted && MATCH_SOUND_URL) {
-          const pop = new Audio(MATCH_SOUND_URL);
-          pop.play().catch(() => {});
-        }
-      };
-
-      const startGame = () => {
-        setGrid(generateGrid());
-        setScore(0);
-        setTimeLeft(TIME_LIMIT);
-        setSelection(null);
-        setGameState('playing');
-        if (bgmRef.current && !isMuted) bgmRef.current.play();
-      };
-
-      const getCellFromEvent = (e) => {
+      // Handle pointer events (logic from original file)
+      const handlePointerDown = (e) => {
         const el = document.elementFromPoint(e.clientX, e.clientY);
         const cell = el?.closest('.game-cell');
-        if (cell) {
-          return {
-            row: parseInt(cell.dataset.row, 10),
-            col: parseInt(cell.dataset.col, 10)
-          };
-        }
-        return null;
-      };
-
-      const handlePointerDown = (e) => {
-        if (gameState !== 'playing') return;
-        if (bgmRef.current && bgmRef.current.paused && !isMuted) {
-          bgmRef.current.play();
-        }
-
-        const coords = getCellFromEvent(e);
-        if (!coords) return;
+        if (!cell) return;
         
         boardRef.current.setPointerCapture(e.pointerId);
-        setSelection({
-          startRow: coords.row,
-          startCol: coords.col,
-          endRow: coords.row,
-          endCol: coords.col
-        });
+        const r = parseInt(cell.dataset.row);
+        const c = parseInt(cell.dataset.col);
+        setSelection({ startRow: r, startCol: c, endRow: r, endCol: c });
       };
 
       const handlePointerMove = (e) => {
-        if (!selection || gameState !== 'playing') return;
-        const coords = getCellFromEvent(e);
-        if (!coords) return;
-
-        setSelection((prev) => ({
-          ...prev,
-          endRow: coords.row,
-          endCol: coords.col
-        }));
+        if (!selection) return;
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const cell = el?.closest('.game-cell');
+        if (cell) {
+          setSelection(prev => ({
+            ...prev,
+            endRow: parseInt(cell.dataset.row),
+            endCol: parseInt(cell.dataset.col)
+          }));
+        }
       };
 
-      const handlePointerUp = (e) => {
-        if (!selection || gameState !== 'playing') return;
-        boardRef.current.releasePointerCapture(e.pointerId);
-
+      const handlePointerUp = () => {
+        if (!selection) return;
         evaluateSelection(selection);
         setSelection(null);
       };
 
       const evaluateSelection = (sel) => {
-        const minRow = Math.min(sel.startRow, sel.endRow);
-        const maxRow = Math.max(sel.startRow, sel.endRow);
-        const minCol = Math.min(sel.startCol, sel.endCol);
-        const maxCol = Math.max(sel.startCol, sel.endCol);
+        const minR = Math.min(sel.startRow, sel.endRow);
+        const maxR = Math.max(sel.startRow, sel.endRow);
+        const minC = Math.min(sel.startCol, sel.endCol);
+        const maxC = Math.max(sel.startCol, sel.endCol);
 
         let sum = 0;
-        let selectedIndices = [];
-
-        grid.forEach((cell, index) => {
-          if (
-            cell.row >= minRow && cell.row <= maxRow &&
-            cell.col >= minCol && cell.col <= maxCol
-          ) {
-            if (!cell.isCleared) {
-              sum += cell.value;
-              selectedIndices.push(index);
-            }
+        let indices = [];
+        grid.forEach((cell, i) => {
+          if (cell.row >= minR && cell.row <= maxR && cell.col >= minC && cell.col <= maxC) {
+            if (!cell.isCleared) { sum += cell.value; indices.push(i); }
           }
         });
 
         if (sum === 10) {
-          playPopSound(); 
-          setGrid((prev) => {
+          setGrid(prev => {
             const next = [...prev];
-            selectedIndices.forEach((idx) => {
-              next[idx] = { ...next[idx], isCleared: true };
-            });
+            indices.forEach(idx => next[idx].isCleared = true);
             return next;
           });
-
-          const cellCount = selectedIndices.length;
-          const extraPoints = cellCount > 2 ? (cellCount - 2) * 100 : 0;
-          setScore((prev) => prev + 1000 + extraPoints);
+          setScore(s => s + 1000);
         }
       };
 
-      if (gameState === 'loading') {
-        return (
-          <div className="flex h-full w-full items-center justify-center bg-slate-900">
-             <h1 className="text-2xl text-pink-500 font-bold animate-pulse">CONNECTING TO DISCORD...</h1>
-          </div>
-        );
-      }
-
       return (
-        <div className="flex flex-col h-full w-full relative font-sans">
-          {/* Header Banner */}
-          <div className="flex justify-between items-center px-4 py-4 bg-slate-800 border-b-4 border-pink-500 shadow-2xl z-20">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/10 rounded-full p-1 flex items-center justify-center border-2 border-pink-400 floating-icon overflow-hidden">
-                <img 
-                  src={DORO_IMG_URL} 
-                  alt="Doro Icon" 
-                  className="w-full h-full object-cover rounded-full"
-                />
-              </div>
-              <h1 className="text-xl sm:text-3xl font-bold text-pink-500 uppercase">
-                Doro Game
-              </h1>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setIsMuted(!isMuted)}
-                className="p-1 hover:bg-slate-700 rounded-lg text-pink-400 transition-colors"
-              >
-                {isMuted ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
-                )}
-              </button>
-              
-              <div className="text-right">
-                <span className="text-[10px] font-bold text-pink-400 uppercase block">Score</span>
-                <div className="text-2xl font-mono font-black text-white">
-                  {score.toLocaleString()}
-                </div>
-              </div>
-            </div>
+        <div className="flex flex-col h-full w-full bg-slate-900 text-white">
+          <div className="p-4 bg-slate-800 border-b-2 border-pink-500 flex justify-between items-center">
+            <h1 className="text-xl font-bold text-pink-500">DORO GAME</h1>
+            <div className="text-xl font-mono">Score: {score}</div>
           </div>
-
-          {/* Timer Bar */}
-          <div className="w-full h-3 bg-slate-700 overflow-hidden relative">
+          <div className="w-full h-2 bg-slate-700">
+             <div className="h-full bg-pink-500 transition-all" style={{width: `${(timeLeft/TIME_LIMIT)*100}%`}}></div>
+          </div>
+          <div className="flex-1 p-2 flex items-center justify-center overflow-hidden">
             <div 
-              className={`absolute inset-y-0 left-0 transition-all duration-100 ease-linear ${
-                timeLeft > 30000 ? 'bg-pink-500' : timeLeft > 10000 ? 'bg-purple-500' : 'bg-red-600'
-              }`}
-              style={{ width: `${(timeLeft / TIME_LIMIT) * 100}%` }}
-            ></div>
-          </div>
-
-          {/* Game Board */}
-          <div className="flex-1 w-full bg-slate-900 flex justify-center items-center p-2 overflow-hidden relative">
-            <div
               ref={boardRef}
-              className="w-full max-h-full max-w-7xl touch-none grid gap-1 sm:gap-2"
-              style={{
-                gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
-              }}
+              className="grid gap-1 w-full max-w-4xl"
+              style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)` }}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
-              onContextMenu={(e) => e.preventDefault()}
             >
-              {grid.map((cell) => {
-                let isSelected = false;
-                if (selection && !cell.isCleared) {
-                  const minRow = Math.min(selection.startRow, selection.endRow);
-                  const maxRow = Math.max(selection.startRow, selection.endRow);
-                  const minCol = Math.min(selection.startCol, selection.endCol);
-                  const maxCol = Math.max(selection.startCol, selection.endCol);
-                  isSelected =
-                    cell.row >= minRow && cell.row <= maxRow &&
-                    cell.col >= minCol && cell.col <= maxCol;
-                }
-
-                return (
-                  <div
-                    key={cell.id}
-                    data-row={cell.row}
-                    data-col={cell.col}
-                    className={`game-cell flex items-center justify-center text-[10px] sm:text-base font-bold rounded-sm select-none touch-none transition-all duration-150 border-b-2 border-black/20
-                      ${cell.isCleared ? 'opacity-0 pointer-events-none' : 'bg-[#C7A8E6] text-black shadow-sm'}
-                      ${isSelected ? 'ring-2 ring-white scale-105 z-10 brightness-110' : ''}
-                    `}
-                  >
-                    {!cell.isCleared && cell.value}
-                  </div>
-                );
-              })}
+              {grid.map((cell) => (
+                <div 
+                  key={cell.id}
+                  data-row={cell.row}
+                  data-col={cell.col}
+                  className={`game-cell flex items-center justify-center text-xs font-bold rounded-sm border-b-2 border-black/20 
+                    ${cell.isCleared ? 'opacity-0' : 'bg-[#C7A8E6] text-black'}`}
+                >
+                  {!cell.isCleared && cell.value}
+                </div>
+              ))}
             </div>
           </div>
-
-          {/* Game Over Overlay */}
           {gameState === 'gameover' && (
-            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col justify-center items-center z-50 text-white p-4 text-center">
-              <h1 className="text-4xl font-bold mb-4 text-pink-500 uppercase">Time's Up!</h1>
-              <div className="bg-slate-800/80 p-4 rounded-xl border-2 border-pink-500/30 mb-6">
-                <p className="text-sm text-pink-200 uppercase font-bold">Final Score</p>
-                <span className="text-5xl text-white font-black">{score.toLocaleString()}</span>
-              </div>
-              <button
-                onClick={startGame}
-                className="px-10 py-4 bg-pink-600 rounded-full text-xl font-bold uppercase hover:scale-105 active:scale-95 transition-all"
-              >
-                Retry
-              </button>
+            <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-50">
+              <h2 className="text-4xl font-bold text-pink-500 mb-4">GAME OVER</h2>
+              <button onClick={() => window.location.reload()} className="px-8 py-3 bg-pink-600 rounded-full font-bold">RETRY</button>
             </div>
           )}
         </div>
